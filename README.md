@@ -68,6 +68,23 @@ own **combined** CSV export uses (`StorageManagerManager.getStorages()`):
   The site also drops `death` and `minigames` if they ever appear, as its CSV
   path does.
 
+### Grand Exchange offers
+
+Items listed for sale and coins committed to buy offers have left your bank,
+and DWMS doesn't track them, so without this a bank uploaded with full GE
+slots would look like it lost value. With **Count Grand Exchange offers** on
+(the default), the plugin adds what is locked in your offers:
+
+- buy offers, active or cancelled: the coins for the part not yet bought;
+- sell offers, active or cancelled: the items not yet sold.
+
+It replaces DWMS's own "Grand Exchange" coin storage, which reads refunds off
+the collection window and would overlap. The filled part of an offer (items
+bought, coins received) is counted once collected: until then the client
+can't tell whether it is still in the collection box or already in the bank,
+and guessing could count it twice. Listing items, then, doesn't change your
+bank's value; only a sale or purchase does.
+
 One thing to know: DWMS filters this list with its **Item Count Tooltip >
 Include ... storages** settings. If you turn one of those off (say, POH
 storages), DWMS leaves that category out of its combined export and out of

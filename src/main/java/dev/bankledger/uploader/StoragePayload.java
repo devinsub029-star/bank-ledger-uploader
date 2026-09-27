@@ -43,6 +43,15 @@ final class StoragePayload {
    * @throws IllegalArgumentException if the response isn't a version 1 storage list
    */
   static StoragePayload fromResponse(Map<String, Object> data) {
+    return fromResponse(data, null, 0);
+  }
+
+  /**
+   * As above, plus what is locked in Grand Exchange offers (see {@link GrandExchangeHoldings}),
+   * which replaces DWMS's own "Grand Exchange" coin storage. Null leaves the GE out entirely.
+   */
+  static StoragePayload fromResponse(
+      Map<String, Object> data, List<Map<String, Object>> grandExchangeItems, long now) {
     Object version = data.get("version");
     if (!(version instanceof Number) || ((Number) version).intValue() != FORMAT_VERSION) {
       throw new IllegalArgumentException("Unsupported Dude, Where's My Stuff message version: " + version);
@@ -52,9 +61,17 @@ final class StoragePayload {
       throw new IllegalArgumentException("No storage list in the response");
     }
 
+    List<Object> all = new ArrayList<>((List<?>) rawStorages);
+    if (grandExchangeItems != null) {
+      all.removeIf(s -> s instanceof Map && GrandExchangeHoldings.isDwmsGrandExchange((Map<?, ?>) s));
+      if (!grandExchangeItems.isEmpty()) {
+        all.add(GrandExchangeHoldings.storage(grandExchangeItems, now));
+      }
+    }
+
     List<Map<String, Object>> storages = new ArrayList<>();
     TreeMap<Integer, Long> merged = new TreeMap<>();
-    for (Object rawStorage : (List<?>) rawStorages) {
+    for (Object rawStorage : all) {
       if (!(rawStorage instanceof Map)) {
         continue;
       }

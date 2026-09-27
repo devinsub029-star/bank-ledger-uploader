@@ -3,7 +3,9 @@ package dev.bankledger.uploader;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import javax.inject.Inject;
@@ -11,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.Player;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.WidgetClosed;
@@ -166,7 +169,11 @@ public class BankLedgerUploaderPlugin extends Plugin {
 
     StoragePayload payload;
     try {
-      payload = StoragePayload.fromResponse(message.getData());
+      payload =
+          StoragePayload.fromResponse(
+              message.getData(),
+              config.includeGrandExchange() ? grandExchangeItems() : null,
+              System.currentTimeMillis());
     } catch (IllegalArgumentException e) {
       log.warn("Unexpected Dude, Where's My Stuff response: {}", e.getMessage());
       return;
@@ -242,6 +249,22 @@ public class BankLedgerUploaderPlugin extends Plugin {
       return name != null && Text.standardize(name).equals(Text.standardize(only));
     }
     return true;
+  }
+
+  /** What is locked in the player's GE offers. Client thread. */
+  private List<Map<String, Object>> grandExchangeItems() {
+    List<GrandExchangeHoldings.Offer> offers = new ArrayList<>();
+    GrandExchangeOffer[] slots = client.getGrandExchangeOffers();
+    if (slots != null) {
+      for (GrandExchangeOffer o : slots) {
+        if (o != null && o.getState() != null) {
+          offers.add(
+              new GrandExchangeHoldings.Offer(
+                  o.getState().name(), o.getItemId(), o.getPrice(), o.getTotalQuantity(), o.getQuantitySold()));
+        }
+      }
+    }
+    return GrandExchangeHoldings.items(offers);
   }
 
   private String localPlayerName() {

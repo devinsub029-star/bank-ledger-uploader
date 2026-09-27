@@ -97,11 +97,23 @@ public interface BankLedgerUploaderConfig extends Config {
   }
 
   @ConfigItem(
+      keyName = "includeGrandExchange",
+      name = "Count Grand Exchange offers",
+      description =
+          "Count items listed for sale and coins committed to buy offers, which have left your bank."
+              + " Only the unfilled part of each offer is counted, so nothing is counted twice.",
+      section = triggerSection,
+      position = 2)
+  default boolean includeGrandExchange() {
+    return true;
+  }
+
+  @ConfigItem(
       keyName = "chatMessages",
       name = "Chat message on upload",
       description = "Say in the chat box when a bank was uploaded",
       section = triggerSection,
-      position = 2)
+      position = 3)
   default boolean chatMessages() {
     return false;
   }
