@@ -1,9 +1,12 @@
 # TODO
 
-- [ ] **Upload now button.** A way to send the bank immediately, without
-      waiting for a bank close, the timer or the cooldown. It could be a button
-      in the plugin's config panel, or a sidebar panel with the last upload's
-      time and result. It should:
+- [ ] **Upload now, in the plugin's settings.** A way to send the bank
+      immediately, without waiting for a bank close, the timer or the
+      cooldown. RuneLite's config panel has no plain buttons, so use the usual
+      pattern: an "Upload now" checkbox. `onConfigChanged` sees it ticked,
+      starts the upload, and unticks it (`configManager.setConfiguration(...,
+      false)`). The key must not also reset the cooldown or the last-sent
+      state the way other settings changes do. It should:
   - bypass the upload cooldown but still skip an unchanged bank, and report
     "already up to date";
   - confirm in chat either way;
