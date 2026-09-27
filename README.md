@@ -101,37 +101,5 @@ the plugin says so in chat once a session, so you know to visit them.
   never shows it.
 - The write key is a secret config value. It goes only to the site in
   **Site** (https only, apart from a local dev server).
-- On the Plugin Hub, plugins that send data to a third-party server carry a
-  `warning=` line in their hub manifest, shown before install. The one for
-  this plugin is drafted in `plugin-hub-manifest.txt`.
-
-## Building and testing
-
-Needs JDK 11+ (tested on 21).
-
-```bash
-./gradlew test    # 13 unit tests: payload, fingerprint, URLs, reply handling
-./gradlew run     # a dev RuneLite client with this plugin (add DWMS for real data)
-```
-
-A live test uploads through the real client code to a running Bank Ledger
-and checks stored, unchanged and a wrong key; it is skipped unless configured:
-
-```bash
-BANK_LEDGER_URL=http://127.0.0.1:8787 BANK_LEDGER_PROFILE=<id> BANK_LEDGER_KEY=<key> ./gradlew test
-```
-
-## Submitting to the Plugin Hub
-
-1. Test in a real client with DWMS: bank close, the timer, logging into an
-   alt with **Only for account** set, DWMS disabled (the "needs DWMS"
-   message).
-2. Push this repository to a **public** GitHub repo (it has the required
-   BSD 2-Clause `LICENSE`; an `icon.png` up to 48x72 px is optional).
-3. Fork <https://github.com/runelite/plugin-hub>, add
-   `plugins/bank-ledger-uploader` with the contents of
-   `plugin-hub-manifest.txt`, filling in the repository URL and the full
-   40-character commit hash, and open a pull request.
-4. Fix anything the CI build or the "RuneLite Plugin Hub Checks" bot flags by
-   pushing a new commit and updating `commit=` in the same pull request.
-5. Updates later are the same: a pull request that changes `commit=`.
+- The Plugin Hub shows a warning before install that this plugin sends data
+  to a third-party server.
