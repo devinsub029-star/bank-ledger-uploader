@@ -96,6 +96,20 @@ public interface BankLedgerUploaderConfig extends Config {
     return 30;
   }
 
+  @Range(min = 1, max = 120)
+  @Units(Units.MINUTES)
+  @ConfigItem(
+      keyName = "uploadCooldownMinutes",
+      name = "Minimum time between uploads",
+      description =
+          "After an upload, wait this long before the next. Changes made meanwhile - going back"
+              + " and forth between the bank and the GE - are sent together when it ends.",
+      section = triggerSection,
+      position = 2)
+  default int uploadCooldownMinutes() {
+    return 10;
+  }
+
   @ConfigItem(
       keyName = "includeGrandExchange",
       name = "Count Grand Exchange offers",
@@ -103,7 +117,7 @@ public interface BankLedgerUploaderConfig extends Config {
           "Count items listed for sale and coins committed to buy offers, which have left your bank."
               + " Only the unfilled part of each offer is counted, so nothing is counted twice.",
       section = triggerSection,
-      position = 2)
+      position = 3)
   default boolean includeGrandExchange() {
     return true;
   }
@@ -113,7 +127,7 @@ public interface BankLedgerUploaderConfig extends Config {
       name = "Chat message on upload",
       description = "Say in the chat box when a bank was uploaded",
       section = triggerSection,
-      position = 3)
+      position = 4)
   default boolean chatMessages() {
     return false;
   }

@@ -78,6 +78,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
   private volatile long deferredUntil;
   private volatile boolean uploading;
   private volatile boolean rejected;
+  private final UploadThrottle throttle = new UploadThrottle();
   private boolean warnedMissingDwms;
   private boolean warnedStale;
 
@@ -106,6 +107,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
       rejected = false;
       deferredUntil = 0;
       lastSent.clear();
+      throttle.reset();
     }
   }
 
@@ -136,7 +138,10 @@ public class BankLedgerUploaderPlugin extends Plugin {
       }
     }
     int interval = config.intervalMinutes();
-    if (interval > 0 && now - lastRequestAt >= interval * 60_000L) {
+    if (throttle.due(now, cooldownMs())) {
+      // A change was held back during the cooldown: fetch the latest bank and send it.
+      clientThread.invokeLater(this::requestStorages);
+    } else if (interval > 0 && now - lastRequestAt >= interval * 60_000L) {
       clientThread.invokeLater(this::requestStorages);
     }
   }
@@ -185,7 +190,12 @@ public class BankLedgerUploaderPlugin extends Plugin {
     String profile = Objects.toString(configManager.getRSProfileKey(), "");
     String fingerprint = payload.fingerprint();
     if (fingerprint.equals(lastSent.get(profile))) {
-      return; // nothing changed since the last upload
+      throttle.release(); // nothing changed since the last upload
+      return;
+    }
+    if (!throttle.allows(System.currentTimeMillis(), cooldownMs())) {
+      throttle.hold(); // sent when the cooldown ends
+      return;
     }
 
     HttpUrl url = BankLedgerClient.uploadUrl(config.siteUrl(), config.profileId());
@@ -204,6 +214,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
     switch (result.getOutcome()) {
       case STORED:
         lastSent.put(profile, fingerprint);
+        throttle.stored(System.currentTimeMillis());
         if (config.chatMessages()) {
           chat(String.format("Bank uploaded to Bank Ledger (%,d gp).", result.getActualWorth()));
         }
@@ -265,6 +276,10 @@ public class BankLedgerUploaderPlugin extends Plugin {
       }
     }
     return GrandExchangeHoldings.items(offers);
+  }
+
+  private long cooldownMs() {
+    return Math.max(1, config.uploadCooldownMinutes()) * 60_000L;
   }
 
   private String localPlayerName() {

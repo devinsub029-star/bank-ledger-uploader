@@ -21,7 +21,9 @@ installed.
    never go to this profile.
 
 Close your bank and the bank is uploaded. It then checks every 30 minutes
-(configurable, 0 to turn off) and sends only when something changed.
+(configurable, 0 to turn off) and sends only when something changed. After an
+upload it waits at least 10 minutes (configurable) before the next, so going
+back and forth between the bank and the GE is one upload, not twenty.
 
 ## How it works
 
@@ -92,6 +94,9 @@ what this plugin receives. Leave them on for a complete bank.
 
 ### Why it doesn't spam the site
 
+- **A cooldown between uploads.** After a stored upload, changes made within
+  **Minimum time between uploads** are held, and the latest bank is sent once
+  when it ends. A change you undo in the meantime isn't sent at all.
 - **Fingerprint first.** The merged bank (id to total quantity) is hashed.
   Moving items between storages, or a new grave, doesn't change it. An
   unchanged bank makes no request at all.
