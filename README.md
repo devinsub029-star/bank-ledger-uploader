@@ -1,15 +1,24 @@
 # Bank Ledger Uploader
 
-A RuneLite plugin that uploads the storages
-[Dude, Where's My Stuff?](https://github.com/Thource/dude-wheres-my-stuff)
-(DWMS) tracks to a [Bank Ledger](https://bank-ledger.osrs-bank-tracker.workers.dev)
-profile, so your bank's worth is charted without exporting CSVs by hand or
-running a Windows scheduled task.
+See what your bank is worth, and how it changes over time.
 
-It is a **second, separate plugin**. DWMS is not modified: since July 2026
-(PR #435) it answers other plugins' requests for its storage data over
-RuneLite's event bus, and this plugin is one such requester. You need both
-installed.
+This plugin sends your bank to
+[Bank Ledger](https://bank-ledger.osrs-bank-tracker.workers.dev), a free
+website that charts your wealth. It also shows what went in and out of your
+bank, and suggests what to sell, alch or process. There's nothing to export
+and nothing to remember: close your bank and it's up to date.
+
+It counts everything
+[Dude, Where's My Stuff?](https://github.com/Thource/dude-wheres-my-stuff)
+knows about, not just the bank: your POH, STASH units, the Looting bag,
+the Seed vault and more. It also counts coins and items tied up in Grand
+Exchange offers, so your worth doesn't drop while you trade.
+
+Optionally, it can keep a history of your Grand Exchange offers on the site,
+visible only to you.
+
+You'll need **Dude, Where's My Stuff?** installed too; this plugin reads what it
+tracks.
 
 ## Setup
 
