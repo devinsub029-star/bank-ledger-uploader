@@ -11,7 +11,7 @@ import java.util.Map;
 import org.junit.Test;
 
 public class GrandExchangeHoldingsTest {
-  private static GrandExchangeHoldings.Offer offer(String state, int id, int price, int total, int sold) {
+  private static GrandExchangeHoldings.Offer offer(String state, int id, long price, int total, int sold) {
     return new GrandExchangeHoldings.Offer(state, id, price, total, sold);
   }
 
@@ -29,6 +29,14 @@ public class GrandExchangeHoldingsTest {
         offer("BUYING", 4151, 1_500_000, 3, 1),        // 2 whips still to buy
         offer("CANCELLED_BUY", 385, 900, 1000, 400)))); // refund of 600 sharks' coins
     assertEquals(Map.of(995, 2 * 1_500_000L + 600 * 900L), held);
+  }
+
+  @Test
+  public void buyPricesAboveTheOldIntLimitCount() {
+    // RuneLite 1.13 made GrandExchangeOffer.getPrice() a long.
+    Map<Integer, Long> held = asMap(GrandExchangeHoldings.items(List.of(
+        offer("BUYING", 20997, 3_000_000_000L, 2, 0))));
+    assertEquals(Map.of(995, 6_000_000_000L), held);
   }
 
   @Test

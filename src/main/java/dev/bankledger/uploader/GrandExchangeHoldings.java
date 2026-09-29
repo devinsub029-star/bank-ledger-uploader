@@ -34,11 +34,11 @@ final class GrandExchangeHoldings {
   static final class Offer {
     final String state;
     final int itemId;
-    final int price;
+    final long price;
     final int totalQuantity;
     final int quantitySold;
 
-    Offer(String state, int itemId, int price, int totalQuantity, int quantitySold) {
+    Offer(String state, int itemId, long price, int totalQuantity, int quantitySold) {
       this.state = state;
       this.itemId = itemId;
       this.price = price;
