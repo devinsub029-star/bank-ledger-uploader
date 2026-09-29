@@ -18,3 +18,5 @@ These are committed here but not yet submitted. The Plugin Hub still runs
 5014af3, and updates are batched to keep reviews light.
 
 - The upload cooldown ("Minimum time between uploads"), in 2e3f3fb.
+- The RuneLite 1.13 build fix (GE offer prices are longs), in 603c98d. The
+  live plugin shows "out of date" until this reaches the Plugin Hub.
