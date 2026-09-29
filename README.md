@@ -25,6 +25,11 @@ Close your bank and the bank is uploaded. It then checks every 30 minutes
 upload it waits at least 10 minutes (configurable) before the next, so going
 back and forth between the bank and the GE is one upload, not twenty.
 
+To send your bank straight away, click **Upload now** in the settings. RuneLite's
+settings have no buttons, so it is a checkbox: every click, ticking or
+unticking, is one upload. It skips the cooldown, and the chat box says how it
+went, including "already up to date" when nothing changed.
+
 ## How it works
 
 ```
@@ -92,6 +97,17 @@ Include ... storages** settings. If you turn one of those off (say, POH
 storages), DWMS leaves that category out of its combined export and out of
 what this plugin receives. Leave them on for a complete bank.
 
+### Offer history
+
+Separately, and off by default, **Send Grand Exchange offers** sends your GE
+slots whenever an offer changes: when you place it, as it fills, when you
+cancel it and when you collect it. For each slot that changed it sends the
+item, side, price, quantity, how much has filled and the gp involved. Changes
+a few seconds apart go together, and a slot the site already has isn't sent
+again. Bank Ledger keeps the current slots and a history of what happened to
+each offer. Only the profile's owner can read them, with the write key, even
+on a public profile. Seasonal and other special worlds are left out.
+
 ### Why it doesn't spam the site
 
 - **A cooldown between uploads.** After a stored upload, changes made within
@@ -118,6 +134,8 @@ the plugin says so in chat once a session, so you know to visit them.
 - Nothing is sent until a profile id and write key are set.
 - What is sent: item ids and quantities per storage, storage names and
   categories, when DWMS last saw each storage, and the plugin version.
+- Your Grand Exchange offers only if you turn on **Send Grand Exchange
+  offers** (see [Offer history](#offer-history)).
 - Your display name is sent only if you turn on **Send display name**, which
   lets a profile set to "Wise Old Man, name blank" fill in the name. The site
   never shows it.

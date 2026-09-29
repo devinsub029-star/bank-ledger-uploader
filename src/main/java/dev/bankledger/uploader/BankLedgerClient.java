@@ -38,10 +38,19 @@ class BankLedgerClient {
   }
 
   /**
-   * The upload URL for a profile, or null if the settings can't make a valid one. The site must be
-   * https, except a local development server.
+   * The storage upload URL for a profile, or null if the settings can't make a valid one. The site
+   * must be https, except a local development server.
    */
   static HttpUrl uploadUrl(String siteUrl, String profileId) {
+    return profileUrl(siteUrl, profileId, "storages");
+  }
+
+  /** Where Grand Exchange offer slots go; null on the same terms as {@link #uploadUrl}. */
+  static HttpUrl geOffersUrl(String siteUrl, String profileId) {
+    return profileUrl(siteUrl, profileId, "ge-offers");
+  }
+
+  private static HttpUrl profileUrl(String siteUrl, String profileId, String view) {
     if (profileId == null || !PROFILE_ID.matcher(profileId.trim()).matches()) {
       return null;
     }
@@ -55,7 +64,7 @@ class BankLedgerClient {
     }
     return base.newBuilder()
         .encodedPath("/")
-        .addPathSegments("api/u/" + profileId.trim() + "/storages")
+        .addPathSegments("api/u/" + profileId.trim() + "/" + view)
         .build();
   }
 

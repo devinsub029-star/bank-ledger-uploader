@@ -11,6 +11,8 @@ import net.runelite.client.config.Units;
 public interface BankLedgerUploaderConfig extends Config {
   String GROUP = "bankledgeruploader";
   String DEFAULT_SITE = "https://bank-ledger.osrs-bank-tracker.workers.dev";
+  String UPLOAD_NOW = "uploadNow";
+  String SEND_GE_OFFERS = "sendGeOffers";
 
   @ConfigSection(
       name = "Profile",
@@ -25,9 +27,15 @@ public interface BankLedgerUploaderConfig extends Config {
   String triggerSection = "triggers";
 
   @ConfigSection(
+      name = "Grand Exchange offers",
+      description = "Keep a history of your Grand Exchange offers on Bank Ledger",
+      position = 2)
+  String geSection = "grandExchange";
+
+  @ConfigSection(
       name = "Privacy",
       description = "What else is sent with your storages",
-      position = 2)
+      position = 3)
   String privacySection = "privacy";
 
   @ConfigItem(
@@ -129,6 +137,31 @@ public interface BankLedgerUploaderConfig extends Config {
       section = triggerSection,
       position = 4)
   default boolean chatMessages() {
+    return false;
+  }
+
+  @ConfigItem(
+      keyName = UPLOAD_NOW,
+      name = "Upload now",
+      description =
+          "Tick to send your bank right away, without waiting for the cooldown. It unticks itself"
+              + " and says in chat how it went.",
+      section = triggerSection,
+      position = 5)
+  default boolean uploadNow() {
+    return false;
+  }
+
+  @ConfigItem(
+      keyName = SEND_GE_OFFERS,
+      name = "Send Grand Exchange offers",
+      description =
+          "Send your GE slots (item, price, quantity and progress) whenever an offer changes, so"
+              + " Bank Ledger keeps a history of your trades. Only you can see them, with your write"
+              + " key.",
+      section = geSection,
+      position = 0)
+  default boolean sendGeOffers() {
     return false;
   }
 

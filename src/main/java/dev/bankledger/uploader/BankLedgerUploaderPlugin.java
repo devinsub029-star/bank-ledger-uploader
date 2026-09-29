@@ -8,20 +8,25 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.Player;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -41,23 +46,28 @@ import okhttp3.OkHttpClient;
  * enabled storage with canonical item ids. This plugin asks when the bank closes and on a timer,
  * and uploads only when the merged bank differs from the last one it sent. Nothing about DWMS is
  * modified; it only has to be installed and enabled.
+ *
+ * <p>If the owner turns it on, it also sends the Grand Exchange slots whenever an offer changes, for
+ * the site's offer history.
  */
 @Slf4j
 @PluginDescriptor(
     name = "Bank Ledger Uploader",
     description = "Uploads your Dude, Where's My Stuff storages to Bank Ledger",
-    tags = {"bank", "value", "worth", "tracker", "dwms", "export"})
+    tags = {"bank", "value", "worth", "tracker", "dwms", "export", "grand exchange"})
 public class BankLedgerUploaderPlugin extends Plugin {
   static final String DWMS_NAMESPACE = "dudewheresmystuff";
   static final String REQUEST = "storages-request";
   static final String RESPONSE = "storages-response";
   static final String SOURCE = "Bank Ledger Uploader";
-  static final String VERSION = "1.0.0";
+  static final String VERSION = "1.1.0";
 
   /** How long DWMS gets to answer before we decide it isn't there. */
   private static final long RESPONSE_TIMEOUT_MS = 10_000;
   /** After a rate limit or read-only reply, wait this long before trying again. */
   private static final long DEFER_MS = 15 * 60_000;
+  /** GE changes come in bursts (a fill, then the next); they are sent together after this. */
+  private static final long GE_BATCH_MS = 5_000;
 
   @Inject private Client client;
   @Inject private ClientThread clientThread;
@@ -67,6 +77,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
   @Inject private BankLedgerUploaderConfig config;
   @Inject private OkHttpClient okHttpClient;
   @Inject private Gson gson;
+  @Inject private ScheduledExecutorService executor;
 
   private BankLedgerClient bankLedger;
 
@@ -78,9 +89,16 @@ public class BankLedgerUploaderPlugin extends Plugin {
   private volatile long deferredUntil;
   private volatile boolean uploading;
   private volatile boolean rejected;
+  /** The pending storages request came from "Upload now": skip the cooldown and report back. */
+  private volatile boolean manual;
   private final UploadThrottle throttle = new UploadThrottle();
   private boolean warnedMissingDwms;
   private boolean warnedStale;
+
+  private final GrandExchangeSlots geSlots = new GrandExchangeSlots();
+  private volatile boolean geBatchScheduled;
+  private volatile long geDeferredUntil;
+  private String geProfile;
 
   @Provides
   BankLedgerUploaderConfig provideConfig(ConfigManager configManager) {
@@ -92,22 +110,40 @@ public class BankLedgerUploaderPlugin extends Plugin {
     bankLedger = new BankLedgerClient(okHttpClient, gson);
     rejected = false;
     warnedMissingDwms = false;
+    if (config.sendGeOffers()) {
+      clientThread.invokeLater(this::queueAllGeSlots);
+    }
   }
 
   @Override
   protected void shutDown() {
     lastSent.clear();
     pendingSince = 0;
+    manual = false;
+    geSlots.reset();
+    geProfile = null;
   }
 
   @Subscribe
   public void onConfigChanged(ConfigChanged event) {
-    if (BankLedgerUploaderConfig.GROUP.equals(event.getGroup())) {
-      // New settings deserve a fresh try, and a first upload.
-      rejected = false;
-      deferredUntil = 0;
-      lastSent.clear();
-      throttle.reset();
+    if (!BankLedgerUploaderConfig.GROUP.equals(event.getGroup())) {
+      return;
+    }
+    if (BankLedgerUploaderConfig.UPLOAD_NOW.equals(event.getKey())) {
+      // A button, in a panel that has none: every click, ticking or unticking, is one upload.
+      // It isn't a settings change, so the cooldown and what was last sent stay as they are.
+      clientThread.invokeLater(this::uploadNow);
+      return;
+    }
+    // New settings deserve a fresh try, and a first upload.
+    rejected = false;
+    deferredUntil = 0;
+    geDeferredUntil = 0;
+    lastSent.clear();
+    throttle.reset();
+    geSlots.reset();
+    if (config.sendGeOffers()) {
+      clientThread.invokeLater(this::queueAllGeSlots);
     }
   }
 
@@ -132,7 +168,8 @@ public class BankLedgerUploaderPlugin extends Plugin {
     long now = System.currentTimeMillis();
     if (pendingSince > 0 && now - pendingSince > RESPONSE_TIMEOUT_MS) {
       pendingSince = 0;
-      if (!warnedMissingDwms) {
+      if (manual || !warnedMissingDwms) {
+        manual = false;
         warnedMissingDwms = true;
         chat("Bank Ledger Uploader needs the Dude, Where's My Stuff? plugin installed and enabled.");
       }
@@ -144,6 +181,36 @@ public class BankLedgerUploaderPlugin extends Plugin {
     } else if (interval > 0 && now - lastRequestAt >= interval * 60_000L) {
       clientThread.invokeLater(this::requestStorages);
     }
+    if (geSlots.hasPending()) {
+      // A batch that failed, or arrived before the player had loaded.
+      clientThread.invokeLater(this::sendGeSlots);
+    }
+  }
+
+  /** "Upload now" in the settings. Client thread. */
+  private void uploadNow() {
+    String problem = settingsProblem();
+    if (problem != null) {
+      chat("Bank Ledger: " + problem);
+      return;
+    }
+    if (client.getGameState() != GameState.LOGGED_IN) {
+      chat("Bank Ledger: log in to upload your bank.");
+      return;
+    }
+    if (!isChosenAccount()) {
+      chat("Bank Ledger: this isn't the account set in \"Only for account\", so nothing was sent.");
+      return;
+    }
+    if (uploading || manual) {
+      chat("Bank Ledger: an upload is already on its way.");
+      return;
+    }
+    // Asked for by hand: a refusal or a rate limit gets one more try.
+    rejected = false;
+    deferredUntil = 0;
+    manual = true;
+    requestStorages();
   }
 
   /** Asks DWMS for its storages. Client thread. */
@@ -168,6 +235,8 @@ public class BankLedgerUploaderPlugin extends Plugin {
     }
     pendingSince = 0;
     warnedMissingDwms = false;
+    boolean byHand = manual;
+    manual = false;
     if (!readyToUpload()) {
       return;
     }
@@ -184,16 +253,23 @@ public class BankLedgerUploaderPlugin extends Plugin {
       return;
     }
     if (payload.isEmpty()) {
-      return; // DWMS hasn't loaded this account's data yet
+      // DWMS hasn't loaded this account's data yet
+      if (byHand) {
+        chat("Bank Ledger: Dude, Where's My Stuff hasn't recorded your bank yet - open your bank once.");
+      }
+      return;
     }
 
     String profile = Objects.toString(configManager.getRSProfileKey(), "");
     String fingerprint = payload.fingerprint();
     if (fingerprint.equals(lastSent.get(profile))) {
       throttle.release(); // nothing changed since the last upload
+      if (byHand) {
+        chat("Bank Ledger: already up to date.");
+      }
       return;
     }
-    if (!throttle.allows(System.currentTimeMillis(), cooldownMs())) {
+    if (!byHand && !throttle.allows(System.currentTimeMillis(), cooldownMs())) {
       throttle.hold(); // sent when the cooldown ends
       return;
     }
@@ -205,22 +281,26 @@ public class BankLedgerUploaderPlugin extends Plugin {
     String player = config.sendPlayerName() ? localPlayerName() : null;
     uploading = true;
     bankLedger.upload(url, config.writeKey(), payload.toRequestBody(player, VERSION),
-        result -> onUploaded(result, profile, fingerprint));
+        result -> onUploaded(result, profile, fingerprint, byHand));
   }
 
   /** OkHttp thread. */
-  private void onUploaded(UploadResult result, String profile, String fingerprint) {
+  private void onUploaded(UploadResult result, String profile, String fingerprint, boolean byHand) {
     uploading = false;
     switch (result.getOutcome()) {
       case STORED:
         lastSent.put(profile, fingerprint);
         throttle.stored(System.currentTimeMillis());
-        if (config.chatMessages()) {
+        if (byHand || config.chatMessages()) {
           chat(String.format("Bank uploaded to Bank Ledger (%,d gp).", result.getActualWorth()));
         }
         break;
       case UNCHANGED:
         lastSent.put(profile, fingerprint);
+        throttle.release();
+        if (byHand) {
+          chat("Bank Ledger: already up to date.");
+        }
         break;
       case REJECTED:
         rejected = true;
@@ -229,9 +309,15 @@ public class BankLedgerUploaderPlugin extends Plugin {
       case DEFERRED:
         deferredUntil = System.currentTimeMillis() + DEFER_MS;
         log.debug("Bank Ledger deferred the upload: {}", result.getMessage());
+        if (byHand) {
+          chat("Bank Ledger: " + result.getMessage());
+        }
         return;
       default:
         log.debug("Bank Ledger upload failed: {}", result.getMessage());
+        if (byHand) {
+          chat("Bank Ledger: the upload failed - " + result.getMessage() + ".");
+        }
         return;
     }
     if (!warnedStale && !result.getStaleStorages().isEmpty()) {
@@ -242,24 +328,142 @@ public class BankLedgerUploaderPlugin extends Plugin {
     }
   }
 
+  @Subscribe
+  public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event) {
+    GrandExchangeOffer offer = event.getOffer();
+    if (!config.sendGeOffers() || offer == null || offer.getState() == null) {
+      return;
+    }
+    // The client empties every slot on the login screen and while hopping, then reports them
+    // again; those empties aren't real.
+    if (offer.getState() == GrandExchangeOfferState.EMPTY && client.getGameState() != GameState.LOGGED_IN) {
+      return;
+    }
+    queueGeSlot(event.getSlot(), offer);
+  }
+
+  /** Client thread. */
+  private void queueGeSlot(int slot, GrandExchangeOffer offer) {
+    // Seasonal and other special worlds have their own GE; their trades aren't this bank's.
+    if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD) {
+      return;
+    }
+    String profile = Objects.toString(configManager.getRSProfileKey(), "");
+    if (!profile.equals(geProfile)) {
+      geSlots.reset(); // another account: the site's copy of its slots is unknown here
+      geProfile = profile;
+    }
+    boolean empty = offer.getState() == GrandExchangeOfferState.EMPTY;
+    GrandExchangeSlots.Slot s =
+        new GrandExchangeSlots.Slot(
+            slot,
+            offer.getState().name(),
+            empty ? 0 : offer.getItemId(),
+            empty ? 0 : offer.getPrice(),
+            empty ? 0 : offer.getTotalQuantity(),
+            empty ? 0 : offer.getQuantitySold(),
+            empty ? 0 : offer.getSpent());
+    if (geSlots.changed(s) && !geBatchScheduled) {
+      geBatchScheduled = true;
+      executor.schedule(
+          () -> {
+            geBatchScheduled = false;
+            clientThread.invokeLater(this::sendGeSlots);
+          },
+          GE_BATCH_MS,
+          TimeUnit.MILLISECONDS);
+    }
+  }
+
+  /** All eight slots, when the setting is turned on while logged in. Client thread. */
+  private void queueAllGeSlots() {
+    if (!config.sendGeOffers() || client.getGameState() != GameState.LOGGED_IN) {
+      return;
+    }
+    GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+    if (offers == null) {
+      return;
+    }
+    for (int i = 0; i < offers.length; i++) {
+      if (offers[i] != null && offers[i].getState() != null) {
+        queueGeSlot(i, offers[i]);
+      }
+    }
+  }
+
+  /** Client thread. */
+  private void sendGeSlots() {
+    if (!config.sendGeOffers()
+        || rejected
+        || System.currentTimeMillis() < geDeferredUntil
+        || settingsProblem() != null
+        || client.getGameState() != GameState.LOGGED_IN
+        || !isChosenAccount()) {
+      return;
+    }
+    HttpUrl url = BankLedgerClient.geOffersUrl(config.siteUrl(), config.profileId());
+    List<GrandExchangeSlots.Slot> batch = geSlots.takeBatch();
+    if (url == null || batch == null) {
+      return;
+    }
+    bankLedger.upload(url, config.writeKey(), GrandExchangeSlots.requestBody(batch), this::onGeSent);
+  }
+
+  /** OkHttp thread. */
+  private void onGeSent(UploadResult result) {
+    switch (result.getOutcome()) {
+      case STORED:
+      case UNCHANGED:
+        geSlots.accepted();
+        break;
+      case REJECTED:
+        geSlots.failed();
+        rejected = true;
+        chat(result.getMessage() + " - check the Bank Ledger Uploader settings.");
+        break;
+      case DEFERRED:
+        geSlots.failed();
+        geDeferredUntil = System.currentTimeMillis() + DEFER_MS;
+        log.debug("Bank Ledger deferred the GE offers: {}", result.getMessage());
+        break;
+      default:
+        geSlots.failed(); // tried again within a minute
+        log.debug("Sending GE offers failed: {}", result.getMessage());
+        break;
+    }
+  }
+
+  /** What's wrong with the profile settings, or null if they can be used. */
+  private String settingsProblem() {
+    if (BankLedgerClient.uploadUrl(config.siteUrl(), config.profileId()) == null) {
+      return config.profileId().trim().isEmpty()
+          ? "set your Profile id in the Bank Ledger Uploader settings."
+          : "the Profile id or Site in the Bank Ledger Uploader settings isn't valid.";
+    }
+    if (!BankLedgerClient.WRITE_KEY.matcher(config.writeKey().trim()).matches()) {
+      return config.writeKey().trim().isEmpty()
+          ? "set your Write key in the Bank Ledger Uploader settings."
+          : "the Write key in the Bank Ledger Uploader settings doesn't look right (it starts bl_).";
+    }
+    return null;
+  }
+
+  /** Whether "Only for account", if set, is the one logged in. Client thread. */
+  private boolean isChosenAccount() {
+    String only = config.accountName().trim();
+    if (only.isEmpty()) {
+      return true;
+    }
+    String name = localPlayerName();
+    return name != null && Text.standardize(name).equals(Text.standardize(only));
+  }
+
   /** Configured, logged in as the chosen account, not waiting out a refusal. Client thread. */
   private boolean readyToUpload() {
     if (rejected || uploading || System.currentTimeMillis() < deferredUntil) {
       return false;
     }
-    if (client.getGameState() != GameState.LOGGED_IN) {
-      return false;
-    }
-    if (BankLedgerClient.uploadUrl(config.siteUrl(), config.profileId()) == null
-        || !BankLedgerClient.WRITE_KEY.matcher(config.writeKey().trim()).matches()) {
-      return false;
-    }
-    String only = config.accountName().trim();
-    if (!only.isEmpty()) {
-      String name = localPlayerName();
-      return name != null && Text.standardize(name).equals(Text.standardize(only));
-    }
-    return true;
+    return client.getGameState() == GameState.LOGGED_IN && settingsProblem() == null && isChosenAccount();
   }
 
   /** What is locked in the player's GE offers. Client thread. */
