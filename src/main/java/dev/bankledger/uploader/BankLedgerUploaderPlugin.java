@@ -18,8 +18,10 @@ import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.Player;
+import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GrandExchangeOfferChanged;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.callback.ClientThread;
@@ -34,6 +36,9 @@ import net.runelite.client.events.PluginMessage;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
+import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.util.Text;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
@@ -68,6 +73,10 @@ public class BankLedgerUploaderPlugin extends Plugin {
   private static final long DEFER_MS = 15 * 60_000;
   /** GE changes come in bursts (a fill, then the next); they are sent together after this. */
   private static final long GE_BATCH_MS = 5_000;
+  /** After collecting from the GE, give DWMS a moment to see the items land before asking. */
+  private static final long COLLECT_DELAY_MS = 3_000;
+  /** Typed in the chat box as "::bankledger" to upload right away. */
+  static final String CHAT_COMMAND = "bankledger";
 
   @Inject private Client client;
   @Inject private ClientThread clientThread;
@@ -78,8 +87,11 @@ public class BankLedgerUploaderPlugin extends Plugin {
   @Inject private OkHttpClient okHttpClient;
   @Inject private Gson gson;
   @Inject private ScheduledExecutorService executor;
+  @Inject private ClientToolbar clientToolbar;
 
   private BankLedgerClient bankLedger;
+  private BankLedgerPanel panel;
+  private NavigationButton navButton;
 
   /** Fingerprint of the last bank the site accepted, per RuneScape profile. */
   private final Map<String, String> lastSent = new HashMap<>();
@@ -91,6 +103,11 @@ public class BankLedgerUploaderPlugin extends Plugin {
   private volatile boolean rejected;
   /** The pending storages request came from "Upload now": skip the cooldown and report back. */
   private volatile boolean manual;
+  /** The pending request is a logout: skip the cooldown, but quietly. */
+  private volatile boolean forced;
+  /** Each GE slot's last state, to tell a collected offer (a slot that just emptied). */
+  private final GrandExchangeOfferState[] geSeen = new GrandExchangeOfferState[8];
+  private volatile boolean collectScheduled;
   private final UploadThrottle throttle = new UploadThrottle();
   private boolean warnedMissingDwms;
   private boolean warnedStale;
@@ -108,6 +125,15 @@ public class BankLedgerUploaderPlugin extends Plugin {
   @Override
   protected void startUp() {
     bankLedger = new BankLedgerClient(okHttpClient, gson);
+    panel = new BankLedgerPanel(() -> clientThread.invokeLater(this::uploadNow), this::openDashboard);
+    navButton =
+        NavigationButton.builder()
+            .tooltip("Bank Ledger")
+            .icon(BankLedgerPanel.icon())
+            .priority(8)
+            .panel(panel)
+            .build();
+    clientToolbar.addNavigation(navButton);
     rejected = false;
     warnedMissingDwms = false;
     if (config.sendGeOffers()) {
@@ -117,6 +143,9 @@ public class BankLedgerUploaderPlugin extends Plugin {
 
   @Override
   protected void shutDown() {
+    clientToolbar.removeNavigation(navButton);
+    navButton = null;
+    panel = null;
     lastSent.clear();
     pendingSince = 0;
     manual = false;
@@ -152,6 +181,23 @@ public class BankLedgerUploaderPlugin extends Plugin {
     if (event.getGameState() == GameState.LOGIN_SCREEN) {
       warnedStale = false;
       pendingSince = 0;
+    }
+  }
+
+  /** "::bankledger" in the chat box: the same as the sidebar's Upload now. Client thread. */
+  @Subscribe
+  public void onCommandExecuted(CommandExecuted event) {
+    if (CHAT_COMMAND.equalsIgnoreCase(event.getCommand())) {
+      uploadNow();
+    }
+  }
+
+  /** Logging out: send any change now rather than leave it until the next session. */
+  @Subscribe
+  public void onMenuOptionClicked(MenuOptionClicked event) {
+    if ("Logout".equalsIgnoreCase(Text.removeTags(event.getMenuOption())) && readyToUpload()) {
+      forced = true;
+      requestStorages();
     }
   }
 
@@ -236,7 +282,9 @@ public class BankLedgerUploaderPlugin extends Plugin {
     pendingSince = 0;
     warnedMissingDwms = false;
     boolean byHand = manual;
+    boolean skipCooldown = byHand || forced;
     manual = false;
+    forced = false;
     if (!readyToUpload()) {
       return;
     }
@@ -269,7 +317,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
       }
       return;
     }
-    if (!byHand && !throttle.allows(System.currentTimeMillis(), cooldownMs())) {
+    if (!skipCooldown && !throttle.allows(System.currentTimeMillis(), cooldownMs())) {
       throttle.hold(); // sent when the cooldown ends
       return;
     }
@@ -291,8 +339,11 @@ public class BankLedgerUploaderPlugin extends Plugin {
       case STORED:
         lastSent.put(profile, fingerprint);
         throttle.stored(System.currentTimeMillis());
+        String stored = String.format("Bank uploaded to Bank Ledger (%,d gp).", result.getActualWorth());
         if (byHand || config.chatMessages()) {
-          chat(String.format("Bank uploaded to Bank Ledger (%,d gp).", result.getActualWorth()));
+          chat(stored);
+        } else {
+          status(stored);
         }
         break;
       case UNCHANGED:
@@ -331,7 +382,11 @@ public class BankLedgerUploaderPlugin extends Plugin {
   @Subscribe
   public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event) {
     GrandExchangeOffer offer = event.getOffer();
-    if (!config.sendGeOffers() || offer == null || offer.getState() == null) {
+    if (offer == null || offer.getState() == null) {
+      return;
+    }
+    noteCollected(event.getSlot(), offer.getState());
+    if (!config.sendGeOffers()) {
       return;
     }
     // The client empties every slot on the login screen and while hopping, then reports them
@@ -340,6 +395,35 @@ public class BankLedgerUploaderPlugin extends Plugin {
       return;
     }
     queueGeSlot(event.getSlot(), offer);
+  }
+
+  /**
+   * A slot that just emptied was collected: coins or items moved into the bank or inventory, so
+   * upload once DWMS has seen them (through the usual cooldown). Client thread.
+   */
+  private void noteCollected(int slot, GrandExchangeOfferState state) {
+    if (slot < 0 || slot >= geSeen.length) {
+      return;
+    }
+    if (client.getGameState() != GameState.LOGGED_IN) {
+      geSeen[slot] = null; // login and hopping report every slot again; those aren't collections
+      return;
+    }
+    GrandExchangeOfferState before = geSeen[slot];
+    geSeen[slot] = state;
+    if (state == GrandExchangeOfferState.EMPTY
+        && before != null
+        && before != GrandExchangeOfferState.EMPTY
+        && !collectScheduled) {
+      collectScheduled = true;
+      executor.schedule(
+          () -> {
+            collectScheduled = false;
+            clientThread.invokeLater(this::requestStorages);
+          },
+          COLLECT_DELAY_MS,
+          TimeUnit.MILLISECONDS);
+    }
   }
 
   /** Client thread. */
@@ -491,8 +575,28 @@ public class BankLedgerUploaderPlugin extends Plugin {
     return player == null ? null : player.getName();
   }
 
+  /** The sidebar's "Open my dashboard". Swing thread. */
+  private void openDashboard() {
+    HttpUrl url = BankLedgerClient.dashboardUrl(config.siteUrl(), config.profileId());
+    if (url == null) {
+      status("Set your Profile id in the Bank Ledger Uploader settings first.");
+      return;
+    }
+    LinkBrowser.browse(url.toString());
+  }
+
+  /** Says it in chat, and shows it in the sidebar too. */
   private void chat(String text) {
     chatMessageManager.queue(
         QueuedMessage.builder().type(ChatMessageType.CONSOLE).runeLiteFormattedMessage(text).build());
+    status(text);
+  }
+
+  /** The sidebar's status line, with the time it happened. */
+  private void status(String text) {
+    BankLedgerPanel p = panel;
+    if (p != null) {
+      p.setStatus(java.time.LocalTime.now().withNano(0) + " - " + text);
+    }
   }
 }

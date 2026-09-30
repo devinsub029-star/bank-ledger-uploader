@@ -20,6 +20,14 @@ public class BankLedgerClientTest {
   }
 
   @Test
+  public void buildsTheDashboardLinkOnTheSameTerms() {
+    assertEquals("https://bank-ledger.osrs-bank-tracker.workers.dev/u/abcde12345",
+        BankLedgerClient.dashboardUrl(BankLedgerUploaderConfig.DEFAULT_SITE, " abcde12345 ").toString());
+    assertNull(BankLedgerClient.dashboardUrl(BankLedgerUploaderConfig.DEFAULT_SITE, "short"));
+    assertNull(BankLedgerClient.dashboardUrl("http://example.com", "abcdefghij"));
+  }
+
+  @Test
   public void buildsTheGrandExchangeUrlOnTheSameTerms() {
     assertEquals("https://example.com/api/u/abcdefghij/ge-offers",
         BankLedgerClient.geOffersUrl("https://example.com", "abcdefghij").toString());

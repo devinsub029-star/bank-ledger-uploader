@@ -21,3 +21,13 @@ d031c5a (1.1.0):
   read by the GE flipper) stay right. Coins moving among the bank, inventory,
   looting bag and GE offers still don't. Devin approved making the change on
   2026-09-30 but said not to submit it yet.
+- Easier manual uploads and fewer reasons to need them (Devin chose these on
+  2026-09-30; not submitted):
+  - a **Bank Ledger sidebar panel** with an Upload now button, the last
+    upload's result and time, and an "Open my dashboard" link;
+  - **`::bankledger`** in the chat box uploads right away;
+  - an upload on **logout** (the Logout menu option, skipping the cooldown
+    quietly) and a few seconds after **collecting from the GE** (a slot that
+    empties; through the usual cooldown).
+  The settings checkbox still works. Untested in a live client so far: try it
+  with `./gradlew run` before submitting.

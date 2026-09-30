@@ -50,6 +50,14 @@ class BankLedgerClient {
     return profileUrl(siteUrl, profileId, "ge-offers");
   }
 
+  /** The profile's dashboard page, for the sidebar's link; null on the same terms as {@link #uploadUrl}. */
+  static HttpUrl dashboardUrl(String siteUrl, String profileId) {
+    HttpUrl api = uploadUrl(siteUrl, profileId);
+    return api == null
+        ? null
+        : api.newBuilder().encodedPath("/").addPathSegments("u/" + profileId.trim()).build();
+  }
+
   private static HttpUrl profileUrl(String siteUrl, String profileId, String view) {
     if (profileId == null || !PROFILE_ID.matcher(profileId.trim()).matches()) {
       return null;
