@@ -68,6 +68,30 @@ public class StoragePayloadTest {
   }
 
   @Test
+  public void movingCoinsIntoACofferIsAChange() {
+    // Same total coins, but fewer of them spendable: the site's on-hand coins must hear of it.
+    StoragePayload a = StoragePayload.fromResponse(response(List.of(
+        storage("coins", "Bank", 1, bank(995, 2000L)),
+        storage("coins", "Managing Miscellania", 1, bank(995, 500L)))));
+    StoragePayload b = StoragePayload.fromResponse(response(List.of(
+        storage("coins", "Bank", 1, bank(995, 1500L)),
+        storage("coins", "Managing Miscellania", 1, bank(995, 1000L)))));
+    assertNotEquals(a.fingerprint(), b.fingerprint());
+  }
+
+  @Test
+  public void coinsMovingAmongSpendableStoragesIsNotAChange() {
+    // Withdrawing coins, or putting them in a buy offer, doesn't change what can be spent.
+    StoragePayload a = StoragePayload.fromResponse(response(List.of(
+        storage("coins", "Bank", 1, bank(995, 2000L)))));
+    StoragePayload b = StoragePayload.fromResponse(response(List.of(
+        storage("coins", "Bank", 1, bank(995, 1200L)),
+        storage("coins", "Inventory", 1, bank(995, 300L)),
+        storage("ge", "Grand Exchange offers", 1, bank(995, 500L)))));
+    assertEquals(a.fingerprint(), b.fingerprint());
+  }
+
+  @Test
   public void quantityChangeChangesTheFingerprint() {
     StoragePayload a = StoragePayload.fromResponse(response(List.of(storage("world", "Bank", 1, bank(385, 10L)))));
     StoragePayload b = StoragePayload.fromResponse(response(List.of(storage("world", "Bank", 1, bank(385, 11L)))));

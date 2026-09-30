@@ -99,7 +99,7 @@ public class GrandExchangeHoldingsTest {
 
     // Same bank, same offers: same fingerprint. The refund is counted once, not twice.
     StoragePayload bankOnly = StoragePayload.fromResponse(response(List.of(
-        storage("world", "Bank", 385, 100L), storage("world", "Other", 995, 540_000L))));
+        storage("world", "Bank", 385, 100L), storage("coins", "Bank", 995, 540_000L))));
     assertEquals(bankOnly.fingerprint(), withGe.fingerprint());
   }
 

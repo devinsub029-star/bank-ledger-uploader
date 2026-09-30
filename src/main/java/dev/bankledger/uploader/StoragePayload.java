@@ -28,6 +28,14 @@ final class StoragePayload {
    */
   static final Set<String> SKIPPED_CATEGORIES = Set.of("death", "minigames");
 
+  static final int COINS = 995;
+  static final int PLATINUM = 13204;
+  /**
+   * Where coins can be spent at the GE straight away: the site counts these as coins on hand.
+   * Coins moving among them (withdrawing to the inventory, a buy offer) change nothing it shows.
+   */
+  static final Set<String> SPENDABLE = Set.of("bank", "inventory", "looting bag", "grand exchange offers");
+
   private final List<Map<String, Object>> storages;
   private final String fingerprint;
 
@@ -71,6 +79,11 @@ final class StoragePayload {
 
     List<Map<String, Object>> storages = new ArrayList<>();
     TreeMap<Integer, Long> merged = new TreeMap<>();
+    // Where the coins are: moving them into the Miscellania coffer leaves the merged bank unchanged
+    // but changes what can be spent, so it has to count as a change too. Spendable storages are one
+    // bucket, and other storages count by name. DWMS lists inventory coins twice (its coins and
+    // carryable Inventory), which is harmless here: both land in the same bucket.
+    TreeMap<String, Long> coinsByStorage = new TreeMap<>();
     for (Object rawStorage : all) {
       if (!(rawStorage instanceof Map)) {
         continue;
@@ -100,6 +113,11 @@ final class StoragePayload {
           items.add(item);
           if (!SKIPPED_CATEGORIES.contains(category)) {
             merged.merge(itemId, qty, Long::sum);
+            if (itemId == COINS || itemId == PLATINUM) {
+              String name = String.valueOf(storage.get("name")).trim().toLowerCase();
+              String where = SPENDABLE.contains(name) ? "spendable" : category + "/" + name;
+              coinsByStorage.merge(where + "/" + itemId, qty, Long::sum);
+            }
           }
         }
       }
@@ -112,7 +130,8 @@ final class StoragePayload {
       out.put("items", items);
       storages.add(out);
     }
-    return new StoragePayload(Collections.unmodifiableList(storages), fingerprintOf(merged));
+    return new StoragePayload(
+        Collections.unmodifiableList(storages), fingerprintOf(merged, coinsByStorage));
   }
 
   /** The request body. playerName is null unless the user chose to send it. */
@@ -127,7 +146,10 @@ final class StoragePayload {
     return body;
   }
 
-  /** A hash of the merged bank (id to total quantity, kept categories only). */
+  /**
+   * A hash of the merged bank (id to total quantity, kept categories only) and of where its coins
+   * are. Items moving between other storages don't change it.
+   */
   String fingerprint() {
     return fingerprint;
   }
@@ -136,9 +158,11 @@ final class StoragePayload {
     return storages.isEmpty();
   }
 
-  private static String fingerprintOf(TreeMap<Integer, Long> merged) {
+  private static String fingerprintOf(TreeMap<Integer, Long> merged, TreeMap<String, Long> coins) {
     StringBuilder canonical = new StringBuilder();
     merged.forEach((id, qty) -> canonical.append(id).append(':').append(qty).append(';'));
+    canonical.append('|');
+    coins.forEach((where, qty) -> canonical.append(where).append(':').append(qty).append(';'));
     try {
       byte[] digest =
           MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(StandardCharsets.UTF_8));

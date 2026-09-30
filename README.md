@@ -122,9 +122,11 @@ on a public profile. Seasonal and other special worlds are left out.
 - **A cooldown between uploads.** After a stored upload, changes made within
   **Minimum time between uploads** are held, and the latest bank is sent once
   when it ends. A change you undo in the meantime isn't sent at all.
-- **Fingerprint first.** The merged bank (id to total quantity) is hashed.
-  Moving items between storages, or a new grave, doesn't change it. An
-  unchanged bank makes no request at all.
+- **Fingerprint first.** The merged bank (id to total quantity) is hashed,
+  along with where its coins are: spendable (bank, inventory, looting bag, GE
+  offers) or somewhere like the Miscellania coffer. Moving items between
+  storages, or a new grave, doesn't change it; moving coins into a coffer
+  does. An unchanged bank makes no request at all.
 - **Server-side dedupe.** If the fingerprint is new to the plugin (after a
   restart) but the bank matches the latest snapshot, the site answers
   `unchanged` without writing anything or counting an upload.
