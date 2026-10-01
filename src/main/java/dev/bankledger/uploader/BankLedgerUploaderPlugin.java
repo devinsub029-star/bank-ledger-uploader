@@ -65,7 +65,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
   static final String REQUEST = "storages-request";
   static final String RESPONSE = "storages-response";
   static final String SOURCE = "Bank Ledger Uploader";
-  static final String VERSION = "1.1.0";
+  static final String VERSION = "1.2.0";
 
   /** How long DWMS gets to answer before we decide it isn't there. */
   private static final long RESPONSE_TIMEOUT_MS = 10_000;
