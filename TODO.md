@@ -13,11 +13,10 @@ d031c5a (1.1.0):
 - **Send Grand Exchange offers** (off by default), in 83b962f, with the
   `warning=` updated to mention offers.
 
-## Submitted: 1.2.0 (runelite/plugin-hub#17504, opened 2026-09-30)
+## Live on the Plugin Hub: 1.2.0 (runelite/plugin-hub#17504, merged and published 2026-10-01 01:21 UTC)
 
 Devin signed off on 2026-09-30 ("Go ahead and pr what's there"). The PR moves commit= from d031c5a to
-00c9488 (1.2.0); warning= is unchanged. It contains everything listed below. When it merges, move this
-under "Live on the Plugin Hub".
+00c9488 (1.2.0); warning= is unchanged. It contains everything listed below; the build and upload checks passed.
 
 ## Was waiting for the next Plugin Hub update (now in 1.2.0)
 
