@@ -13,7 +13,7 @@ d031c5a (1.1.0):
 - **Send Grand Exchange offers** (off by default), in 83b962f, with the
   `warning=` updated to mention offers.
 
-## Waiting for Devin's sign-off: 1.2.1 (not submitted)
+## Submitted: 1.2.1 (runelite/plugin-hub#17532, opened 2026-10-01; Devin: "submit 1.2.1")
 
 - Removes `::bankledger`. Typing it ran the upload, but the text also reached the game server, and OSRS
   answers unknown `::` commands by making the player say "Hey, everyone, I just tried to do something
