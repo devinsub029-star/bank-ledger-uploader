@@ -18,7 +18,6 @@ import net.runelite.api.GameState;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.Player;
-import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.MenuOptionClicked;
@@ -65,7 +64,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
   static final String REQUEST = "storages-request";
   static final String RESPONSE = "storages-response";
   static final String SOURCE = "Bank Ledger Uploader";
-  static final String VERSION = "1.2.0";
+  static final String VERSION = "1.2.1";
 
   /** How long DWMS gets to answer before we decide it isn't there. */
   private static final long RESPONSE_TIMEOUT_MS = 10_000;
@@ -75,8 +74,6 @@ public class BankLedgerUploaderPlugin extends Plugin {
   private static final long GE_BATCH_MS = 5_000;
   /** After collecting from the GE, give DWMS a moment to see the items land before asking. */
   private static final long COLLECT_DELAY_MS = 3_000;
-  /** Typed in the chat box as "::bankledger" to upload right away. */
-  static final String CHAT_COMMAND = "bankledger";
 
   @Inject private Client client;
   @Inject private ClientThread clientThread;
@@ -181,14 +178,6 @@ public class BankLedgerUploaderPlugin extends Plugin {
     if (event.getGameState() == GameState.LOGIN_SCREEN) {
       warnedStale = false;
       pendingSince = 0;
-    }
-  }
-
-  /** "::bankledger" in the chat box: the same as the sidebar's Upload now. Client thread. */
-  @Subscribe
-  public void onCommandExecuted(CommandExecuted event) {
-    if (CHAT_COMMAND.equalsIgnoreCase(event.getCommand())) {
-      uploadNow();
     }
   }
 

@@ -13,6 +13,13 @@ d031c5a (1.1.0):
 - **Send Grand Exchange offers** (off by default), in 83b962f, with the
   `warning=` updated to mention offers.
 
+## Waiting for Devin's sign-off: 1.2.1 (not submitted)
+
+- Removes `::bankledger`. Typing it ran the upload, but the text also reached the game server, and OSRS
+  answers unknown `::` commands by making the player say "Hey, everyone, I just tried to do something
+  very silly!" in public chat (Devin, 2026-10-01). The sidebar Upload now button replaces it. To submit:
+  same steps as 1.2.0 (HANDOFF.md), commit= the 1.2.1 SHA, warning= unchanged.
+
 ## Live on the Plugin Hub: 1.2.0 (runelite/plugin-hub#17504, merged and published 2026-10-01 01:21 UTC)
 
 Devin signed off on 2026-09-30 ("Go ahead and pr what's there"). The PR moves commit= from d031c5a to

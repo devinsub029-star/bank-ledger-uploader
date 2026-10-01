@@ -145,7 +145,7 @@ public interface BankLedgerUploaderConfig extends Config {
       name = "Upload now",
       description =
           "Tick to send your bank right away, without waiting for the cooldown, and see in chat how"
-              + " it went. The Bank Ledger sidebar button and typing ::bankledger in chat do the same.",
+              + " it went. The Bank Ledger sidebar button does the same.",
       section = triggerSection,
       position = 5)
   default boolean uploadNow() {
