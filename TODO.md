@@ -13,7 +13,18 @@ d031c5a (1.1.0):
 - **Send Grand Exchange offers** (off by default), in 83b962f, with the
   `warning=` updated to mention offers.
 
-## Submitted: 1.2.1 (runelite/plugin-hub#17532, opened 2026-10-01; Devin: "submit 1.2.1")
+## Ready, not submitted: 1.2.2 (needs Devin's sign-off before a Plugin Hub PR)
+
+Devin, 2026-10-01: "no longer send messages to chat on upload. The side panel can show last uploaded
+time / amount. Add in the option to set wait between uploads to 0".
+- Routine upload news (uploaded, already up to date, deferred, failed, stale storages) goes to the
+  sidebar only; chat keeps only problems that stop uploads (bad write key or settings, DWMS missing).
+  The "Chat message on upload" setting is gone.
+- The sidebar shows "Last upload: <time>, <gp>", kept per RuneScape profile in the config (survives a
+  restart).
+- "Minimum time between uploads" accepts 0 (every change is sent right away).
+
+## Live on the Plugin Hub: 1.2.1 (runelite/plugin-hub#17532, merged 2026-10-01; Devin: "submit 1.2.1")
 
 - Removes `::bankledger`. Typing it ran the upload, but the text also reached the game server, and OSRS
   answers unknown `::` commands by making the player say "Hey, everyone, I just tried to do something

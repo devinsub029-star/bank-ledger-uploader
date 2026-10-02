@@ -9,6 +9,9 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -21,11 +24,14 @@ import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 
 /**
- * The sidebar panel: an Upload now button, how the last upload went, and a link to the
- * dashboard. It replaces ticking "Upload now" in the settings, which RuneLite's config panel
- * forces to be a checkbox.
+ * The sidebar panel: an Upload now button, when the last upload was and what the bank was worth,
+ * the latest news (the chat box stays quiet about routine uploads), and a link to the dashboard.
+ * It replaces ticking "Upload now" in the settings, which RuneLite's config panel forces to be a
+ * checkbox.
  */
 class BankLedgerPanel extends PluginPanel {
+  private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("MMM d, HH:mm");
+  private final JLabel lastUpload = new JLabel();
   private final JLabel status = new JLabel();
 
   BankLedgerPanel(Runnable onUpload, Runnable onOpenDashboard) {
@@ -47,11 +53,14 @@ class BankLedgerPanel extends PluginPanel {
     JButton open = new JButton("Open my dashboard");
     open.addActionListener(e -> onOpenDashboard.run());
 
+    lastUpload.setForeground(Color.WHITE);
+    lastUpload.setFont(FontManager.getRunescapeSmallFont());
+    setLastUpload(0, 0);
     status.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
     status.setFont(FontManager.getRunescapeSmallFont());
-    setStatus("No upload yet this session.");
+    setStatus("Nothing yet this session.");
 
-    for (Component c : new Component[] {title, upload, open, status}) {
+    for (Component c : new Component[] {title, upload, open, lastUpload, status}) {
       ((javax.swing.JComponent) c).setAlignmentX(Component.LEFT_ALIGNMENT);
       if (c instanceof JButton) {
         c.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
@@ -60,6 +69,15 @@ class BankLedgerPanel extends PluginPanel {
       body.add(Box.createVerticalStrut(8));
     }
     add(body, BorderLayout.NORTH);
+  }
+
+  /** When the last stored upload was (epoch ms, 0 for none) and the bank's worth then. Any thread. */
+  void setLastUpload(long at, long worth) {
+    String text = at <= 0
+        ? "Last upload: none yet"
+        : "Last upload: " + WHEN.format(Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()))
+            + "<br>" + String.format("%,d gp", worth);
+    SwingUtilities.invokeLater(() -> lastUpload.setText("<html>" + text + "</html>"));
   }
 
   /** Any thread. */

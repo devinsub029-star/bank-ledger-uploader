@@ -31,13 +31,18 @@ tracks.
 
 Close your bank and the bank is uploaded. It then checks every 30 minutes
 (configurable, 0 to turn off) and sends only when something changed. After an
-upload it waits at least 10 minutes (configurable) before the next, so going
-back and forth between the bank and the GE is one upload, not twenty.
+upload it waits at least 10 minutes (configurable; 0 sends every change right
+away) before the next, so going back and forth between the bank and the GE is
+one upload, not twenty.
 
-To send your bank straight away, click **Upload now** in the settings. RuneLite's
-settings have no buttons, so it is a checkbox: every click, ticking or
-unticking, is one upload. It skips the cooldown, and the chat box says how it
-went, including "already up to date" when nothing changed.
+The **Bank Ledger** sidebar shows when your last upload was and what your bank
+was worth then, plus how the latest attempt went ("already up to date", say).
+Uploads stay out of the chat box; only a problem that stops them (a wrong write
+key, Dude, Where's My Stuff missing) is said in chat.
+
+To send your bank straight away, click **Upload now** in the sidebar. It is in
+the settings too, as a checkbox, because RuneLite's settings have no buttons:
+every click, ticking or unticking, is one upload. It skips the cooldown.
 
 ## How it works
 
@@ -138,7 +143,7 @@ on a public profile. Seasonal and other special worlds are left out.
 
 Every storage carries DWMS's `lastUpdated`. The site counts storages DWMS
 hasn't seen in 30 days (or ever) but lists them back as `staleStorages`, and
-the plugin says so in chat once a session, so you know to visit them.
+the plugin says so in the sidebar once a session, so you know to visit them.
 
 ## Privacy
 

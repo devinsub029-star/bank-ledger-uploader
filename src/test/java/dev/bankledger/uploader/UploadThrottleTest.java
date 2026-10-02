@@ -53,4 +53,12 @@ public class UploadThrottleTest {
     t.reset();
     assertTrue(t.allows(1, COOLDOWN));
   }
+
+  @Test
+  public void aZeroCooldownSendsEveryChange() {
+    UploadThrottle t = new UploadThrottle();
+    t.stored(1000);
+    assertTrue(t.allows(1000, 0));
+    assertTrue(t.allows(1001, 0));
+  }
 }

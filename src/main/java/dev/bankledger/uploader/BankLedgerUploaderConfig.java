@@ -104,14 +104,15 @@ public interface BankLedgerUploaderConfig extends Config {
     return 30;
   }
 
-  @Range(min = 1, max = 120)
+  @Range(min = 0, max = 120)
   @Units(Units.MINUTES)
   @ConfigItem(
       keyName = "uploadCooldownMinutes",
       name = "Minimum time between uploads",
       description =
           "After an upload, wait this long before the next. Changes made meanwhile - going back"
-              + " and forth between the bank and the GE - are sent together when it ends.",
+              + " and forth between the bank and the GE - are sent together when it ends. 0 sends"
+              + " every change right away.",
       section = triggerSection,
       position = 2)
   default int uploadCooldownMinutes() {
@@ -131,23 +132,13 @@ public interface BankLedgerUploaderConfig extends Config {
   }
 
   @ConfigItem(
-      keyName = "chatMessages",
-      name = "Chat message on upload",
-      description = "Say in the chat box when a bank was uploaded",
-      section = triggerSection,
-      position = 4)
-  default boolean chatMessages() {
-    return false;
-  }
-
-  @ConfigItem(
       keyName = UPLOAD_NOW,
       name = "Upload now",
       description =
-          "Tick to send your bank right away, without waiting for the cooldown, and see in chat how"
-              + " it went. The Bank Ledger sidebar button does the same.",
+          "Tick to send your bank right away, without waiting for the cooldown. The Bank Ledger"
+              + " sidebar shows how it went, and has an Upload now button that does the same.",
       section = triggerSection,
-      position = 5)
+      position = 4)
   default boolean uploadNow() {
     return false;
   }

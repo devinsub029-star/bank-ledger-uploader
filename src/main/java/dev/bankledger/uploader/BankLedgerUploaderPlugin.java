@@ -64,7 +64,8 @@ public class BankLedgerUploaderPlugin extends Plugin {
   static final String REQUEST = "storages-request";
   static final String RESPONSE = "storages-response";
   static final String SOURCE = "Bank Ledger Uploader";
-  static final String VERSION = "1.2.1";
+  static final String VERSION = "1.2.2";
+  private static final String LAST_UPLOAD_KEY = "lastUpload";
 
   /** How long DWMS gets to answer before we decide it isn't there. */
   private static final long RESPONSE_TIMEOUT_MS = 10_000;
@@ -131,6 +132,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
             .panel(panel)
             .build();
     clientToolbar.addNavigation(navButton);
+    clientThread.invokeLater(this::showLastUpload);  // turned on while already logged in
     rejected = false;
     warnedMissingDwms = false;
     if (config.sendGeOffers()) {
@@ -178,6 +180,8 @@ public class BankLedgerUploaderPlugin extends Plugin {
     if (event.getGameState() == GameState.LOGIN_SCREEN) {
       warnedStale = false;
       pendingSince = 0;
+    } else if (event.getGameState() == GameState.LOGGED_IN) {
+      showLastUpload();
     }
   }
 
@@ -230,15 +234,15 @@ public class BankLedgerUploaderPlugin extends Plugin {
       return;
     }
     if (client.getGameState() != GameState.LOGGED_IN) {
-      chat("Bank Ledger: log in to upload your bank.");
+      status("Log in to upload your bank.");
       return;
     }
     if (!isChosenAccount()) {
-      chat("Bank Ledger: this isn't the account set in \"Only for account\", so nothing was sent.");
+      status("This isn't the account set in \"Only for account\", so nothing was sent.");
       return;
     }
     if (uploading || manual) {
-      chat("Bank Ledger: an upload is already on its way.");
+      status("An upload is already on its way.");
       return;
     }
     // Asked for by hand: a refusal or a rate limit gets one more try.
@@ -292,7 +296,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
     if (payload.isEmpty()) {
       // DWMS hasn't loaded this account's data yet
       if (byHand) {
-        chat("Bank Ledger: Dude, Where's My Stuff hasn't recorded your bank yet - open your bank once.");
+        status("Dude, Where's My Stuff hasn't recorded your bank yet - open your bank once.");
       }
       return;
     }
@@ -302,7 +306,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
     if (fingerprint.equals(lastSent.get(profile))) {
       throttle.release(); // nothing changed since the last upload
       if (byHand) {
-        chat("Bank Ledger: already up to date.");
+        status("Already up to date.");
       }
       return;
     }
@@ -328,18 +332,15 @@ public class BankLedgerUploaderPlugin extends Plugin {
       case STORED:
         lastSent.put(profile, fingerprint);
         throttle.stored(System.currentTimeMillis());
-        String stored = String.format("Bank uploaded to Bank Ledger (%,d gp).", result.getActualWorth());
-        if (byHand || config.chatMessages()) {
-          chat(stored);
-        } else {
-          status(stored);
-        }
+        long at = System.currentTimeMillis();
+        rememberUpload(profile, at, result.getActualWorth());
+        status("Uploaded.");
         break;
       case UNCHANGED:
         lastSent.put(profile, fingerprint);
         throttle.release();
         if (byHand) {
-          chat("Bank Ledger: already up to date.");
+          status("Already up to date.");
         }
         break;
       case REJECTED:
@@ -350,19 +351,19 @@ public class BankLedgerUploaderPlugin extends Plugin {
         deferredUntil = System.currentTimeMillis() + DEFER_MS;
         log.debug("Bank Ledger deferred the upload: {}", result.getMessage());
         if (byHand) {
-          chat("Bank Ledger: " + result.getMessage());
+          status(result.getMessage());
         }
         return;
       default:
         log.debug("Bank Ledger upload failed: {}", result.getMessage());
         if (byHand) {
-          chat("Bank Ledger: the upload failed - " + result.getMessage() + ".");
+          status("The upload failed - " + result.getMessage() + ".");
         }
         return;
     }
     if (!warnedStale && !result.getStaleStorages().isEmpty()) {
       warnedStale = true;
-      chat("Bank Ledger: some storages haven't been checked in a while - "
+      status("Some storages haven't been checked in a while - "
           + String.join(", ", result.getStaleStorages().subList(0, Math.min(5, result.getStaleStorages().size())))
           + ". Visit them so Dude, Where's My Stuff can update them.");
     }
@@ -556,7 +557,40 @@ public class BankLedgerUploaderPlugin extends Plugin {
   }
 
   private long cooldownMs() {
-    return Math.max(1, config.uploadCooldownMinutes()) * 60_000L;
+    return Math.max(0, config.uploadCooldownMinutes()) * 60_000L;
+  }
+
+  /** Keeps the last stored upload per RuneScape profile, so the sidebar shows it after a restart. */
+  private void rememberUpload(String profile, long at, long worth) {
+    if (!profile.isEmpty()) {
+      configManager.setConfiguration(BankLedgerUploaderConfig.GROUP, profile, LAST_UPLOAD_KEY, at + "," + worth);
+    }
+    BankLedgerPanel p = panel;
+    if (p != null) {
+      p.setLastUpload(at, worth);
+    }
+  }
+
+  /** Shows the logged-in profile's last upload in the sidebar. Client thread. */
+  private void showLastUpload() {
+    BankLedgerPanel p = panel;
+    String profile = configManager.getRSProfileKey();
+    if (p == null || profile == null) {
+      return;
+    }
+    String saved = configManager.getConfiguration(BankLedgerUploaderConfig.GROUP, profile, LAST_UPLOAD_KEY);
+    long at = 0;
+    long worth = 0;
+    if (saved != null) {
+      String[] parts = saved.split(",");
+      try {
+        at = Long.parseLong(parts[0]);
+        worth = parts.length > 1 ? Long.parseLong(parts[1]) : 0;
+      } catch (NumberFormatException e) {
+        at = 0;
+      }
+    }
+    p.setLastUpload(at, worth);
   }
 
   private String localPlayerName() {
@@ -574,7 +608,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
     LinkBrowser.browse(url.toString());
   }
 
-  /** Says it in chat, and shows it in the sidebar too. */
+  /** Says it in chat, and shows it in the sidebar too. Only for problems that stop uploads. */
   private void chat(String text) {
     chatMessageManager.queue(
         QueuedMessage.builder().type(ChatMessageType.CONSOLE).runeLiteFormattedMessage(text).build());
