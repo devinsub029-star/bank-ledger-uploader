@@ -111,6 +111,22 @@ Include ... storages** settings. If you turn one of those off (say, POH
 storages), DWMS leaves that category out of its combined export and out of
 what this plugin receives. Leave them on for a complete bank.
 
+### Weapon charges
+
+Runes and scales loaded into a charged weapon have left your bank, and DWMS
+doesn't track charges, so charging Tumeken's shadow looked like the runes had
+been used up. With **Count weapon charges** on (the default), the plugin reads
+each weapon's charge count from the game and adds a "Weapon charges" storage
+holding what those charges are made of:
+
+- Tumeken's shadow: 2 soul runes and 5 chaos runes a charge;
+- toxic blowpipe: its Zulrah's scales (the darts aren't readable, so they
+  aren't counted);
+- Sanguinesti staff: 3 blood runes a charge.
+
+Charges count only while the charged weapon itself is in a tracked storage,
+so a weapon you've sold or emptied adds nothing.
+
 ### Offer history
 
 Separately, and off by default, **Send Grand Exchange offers** sends your GE

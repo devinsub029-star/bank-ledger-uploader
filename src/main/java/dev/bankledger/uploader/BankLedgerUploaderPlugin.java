@@ -64,7 +64,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
   static final String REQUEST = "storages-request";
   static final String RESPONSE = "storages-response";
   static final String SOURCE = "Bank Ledger Uploader";
-  static final String VERSION = "1.2.2";
+  static final String VERSION = "1.3.0";
   private static final String LAST_UPLOAD_KEY = "lastUpload";
 
   /** How long DWMS gets to answer before we decide it isn't there. */
@@ -288,6 +288,7 @@ public class BankLedgerUploaderPlugin extends Plugin {
           StoragePayload.fromResponse(
               message.getData(),
               config.includeGrandExchange() ? grandExchangeItems() : null,
+              config.includeWeaponCharges() ? weaponCharges() : null,
               System.currentTimeMillis());
     } catch (IllegalArgumentException e) {
       log.warn("Unexpected Dude, Where's My Stuff response: {}", e.getMessage());
@@ -554,6 +555,15 @@ public class BankLedgerUploaderPlugin extends Plugin {
       }
     }
     return GrandExchangeHoldings.items(offers);
+  }
+
+  /** Each charged weapon's charge varbit. Client thread. */
+  private Map<Integer, Integer> weaponCharges() {
+    Map<Integer, Integer> charges = new HashMap<>();
+    for (WeaponCharges.Weapon w : WeaponCharges.WEAPONS) {
+      charges.put(w.varbit, client.getVarbitValue(w.varbit));
+    }
+    return charges;
   }
 
   private long cooldownMs() {

@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,18 @@ final class StoragePayload {
    */
   static StoragePayload fromResponse(
       Map<String, Object> data, List<Map<String, Object>> grandExchangeItems, long now) {
+    return fromResponse(data, grandExchangeItems, null, now);
+  }
+
+  /**
+   * As above, plus what is loaded in charged weapons (see {@link WeaponCharges}): charges is varbit
+   * id to value, or null to leave charges out.
+   */
+  static StoragePayload fromResponse(
+      Map<String, Object> data,
+      List<Map<String, Object>> grandExchangeItems,
+      Map<Integer, Integer> charges,
+      long now) {
     Object version = data.get("version");
     if (!(version instanceof Number) || ((Number) version).intValue() != FORMAT_VERSION) {
       throw new IllegalArgumentException("Unsupported Dude, Where's My Stuff message version: " + version);
@@ -74,6 +87,12 @@ final class StoragePayload {
       all.removeIf(s -> s instanceof Map && GrandExchangeHoldings.isDwmsGrandExchange((Map<?, ?>) s));
       if (!grandExchangeItems.isEmpty()) {
         all.add(GrandExchangeHoldings.storage(grandExchangeItems, now));
+      }
+    }
+    if (charges != null) {
+      List<Map<String, Object>> loaded = WeaponCharges.items(charges, heldIds(all));
+      if (!loaded.isEmpty()) {
+        all.add(WeaponCharges.storage(loaded, now));
       }
     }
 
@@ -156,6 +175,32 @@ final class StoragePayload {
 
   boolean isEmpty() {
     return storages.isEmpty();
+  }
+
+  /** Item ids in the storages the server keeps (not death or minigame ones). */
+  private static Set<Integer> heldIds(List<Object> storages) {
+    Set<Integer> ids = new HashSet<>();
+    for (Object rawStorage : storages) {
+      if (!(rawStorage instanceof Map)) {
+        continue;
+      }
+      Map<?, ?> storage = (Map<?, ?>) rawStorage;
+      Object rawItems = storage.get("items");
+      if (SKIPPED_CATEGORIES.contains(String.valueOf(storage.get("category"))) || !(rawItems instanceof List)) {
+        continue;
+      }
+      for (Object rawItem : (List<?>) rawItems) {
+        if (!(rawItem instanceof Map)) {
+          continue;
+        }
+        Object id = ((Map<?, ?>) rawItem).get("id");
+        Object quantity = ((Map<?, ?>) rawItem).get("quantity");
+        if (id instanceof Number && quantity instanceof Number && ((Number) quantity).longValue() > 0) {
+          ids.add(((Number) id).intValue());
+        }
+      }
+    }
+    return ids;
   }
 
   private static String fingerprintOf(TreeMap<Integer, Long> merged, TreeMap<String, Long> coins) {

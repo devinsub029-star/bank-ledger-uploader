@@ -132,13 +132,26 @@ public interface BankLedgerUploaderConfig extends Config {
   }
 
   @ConfigItem(
+      keyName = "includeWeaponCharges",
+      name = "Count weapon charges",
+      description =
+          "Count what is loaded in charged weapons, which has left your bank: soul and chaos runes"
+              + " in Tumeken's shadow, scales in a toxic blowpipe, blood runes in a Sanguinesti"
+              + " staff. Darts in a blowpipe can't be read, so they aren't counted.",
+      section = triggerSection,
+      position = 4)
+  default boolean includeWeaponCharges() {
+    return true;
+  }
+
+  @ConfigItem(
       keyName = UPLOAD_NOW,
       name = "Upload now",
       description =
           "Tick to send your bank right away, without waiting for the cooldown. The Bank Ledger"
               + " sidebar shows how it went, and has an Upload now button that does the same.",
       section = triggerSection,
-      position = 4)
+      position = 5)
   default boolean uploadNow() {
     return false;
   }
